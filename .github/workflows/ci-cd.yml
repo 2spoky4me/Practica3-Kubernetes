@@ -1,0 +1,39 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Simulated build
+        run: |
+          echo "Building application..."
+          echo "Build OK"
+
+      - name: Simulated tests - health check
+        run: |
+          echo "Running health-check test..."
+          echo "GET /status -> 200 OK"
+
+      - name: Simulated tests - database
+        run: |
+          echo "Testing database connection..."
+          echo "Database connection OK"
+
+      - name: Simulated tests - redis
+        run: |
+          echo "Testing Redis cache..."
+          echo "Redis cache OK"
+
+      - name: Simulated deploy
+        run: |
+          echo "Deploying application..."
+          echo "Deploy simulated successfully"
