@@ -15,13 +15,17 @@ spec:
     spec:
       containers:
         - name: flask-app
-          image: flask-app:dev
+          image: flask-app:prac3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           env:
             - name: APP_ENV
               value: "dev"
+            - name: APP_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: DB_HOST
               valueFrom:
                 configMapKeyRef:

@@ -15,14 +15,17 @@ spec:
     spec:
       containers:
         - name: flask-app
-          image: flask-app:dev
+          image: flask-app:prac3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
           env:
             - name: APP_ENV
               value: "prod"
-
+            - name: APP_INSTANCE_ID
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: DB_HOST
               valueFrom:
                 configMapKeyRef:
@@ -48,12 +51,10 @@ spec:
                 secretKeyRef:
                   name: postgres-secret
                   key: POSTGRES_PASSWORD
-
             - name: REDIS_HOST
               value: redis
             - name: REDIS_PORT
               value: "6379"
-
           readinessProbe:
             httpGet:
               path: /status
