@@ -99,3 +99,24 @@ grafana:
 
 test:
 	./scripts/run_tests_local.sh
+
+# --------------------
+# PRO - Persistencia Postgres
+# --------------------
+
+.PHONY: pro-db-kill pro-db-wait pro-db-status
+
+# Borra el pod de Postgres (simula caída)
+pro-db-kill:
+	@echo "💥 Borrando pod de Postgres en PRO..."
+	kubectl delete pod -n pro -l app=postgres
+
+# Espera a que Postgres vuelva a estar Ready
+pro-db-wait:
+	@echo "⏳ Esperando a que Postgres vuelva a estar Ready..."
+	kubectl wait --for=condition=ready pod -n pro -l app=postgres --timeout=120s
+
+# Muestra el estado actual de Postgres
+pro-db-status:
+	kubectl get pods -n pro -l app=postgres
+
