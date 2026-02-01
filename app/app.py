@@ -7,7 +7,7 @@ import json
 app = Flask(__name__)
 
 # =====================================================
-# VARIABLES DE ENTORNO (inyectadas por Terraform)
+# VARIABLES DE ENTORNO
 # =====================================================
 DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
@@ -19,14 +19,14 @@ INSTANCE_ID = os.getenv("APP_INSTANCE_ID", "0")
 APP_ENV = os.getenv("APP_ENV", "dev")
 LOGO_URL = os.getenv("LOGO_URL", "")
 
-# -----------------------------
-# Redis (cache) - SOLO EN PROD
-# -----------------------------
 REDIS_HOST = os.getenv("REDIS_HOST", "")
 REDIS_PORT = os.getenv("REDIS_PORT", "")
 
 USE_REDIS = APP_ENV == "prod" and REDIS_HOST != "" and REDIS_PORT != ""
 
+# =====================================================
+# REDIS (solo en PRO)
+# =====================================================
 if USE_REDIS:
     redis_client = redis.Redis(
         host=REDIS_HOST,
@@ -35,8 +35,7 @@ if USE_REDIS:
     )
 else:
     redis_client = None
-    print("⚠ Redis desactivado en este entorno.")
-
+    print("Redis desactivado en este entorno")
 
 # =====================================================
 # CONEXIÓN A POSTGRES
@@ -50,6 +49,23 @@ def get_connection():
         port=DB_PORT
     )
 
+# =====================================================
+# ASEGURAR EXISTENCIA DE LA TABLA
+# =====================================================
+def ensure_table_exists():
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name TEXT,
+            surname TEXT,
+            age INTEGER
+        );
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
 
 # =====================================================
 # HOME
@@ -66,21 +82,18 @@ def index():
         </div>
         {% endif %}
 
-        <h2>Hola! La aplicación Flask está funcionando 😊</h2>
+        <h2>Hola! Flask funcionando</h2>
 
         <p>Entorno: <b>{{ env }}</b></p>
-        <p>Instancia atendida: <b>{{ instance }}</b></p>
+        <p>Instancia: <b>{{ instance }}</b></p>
 
         <a href="/form">
-          <button style="padding: 10px 20px; font-size: 16px; cursor: pointer;">
-            Ir al formulario
-          </button>
+          <button>Ir al formulario</button>
         </a>
 
       </body>
     </html>
     """, instance=INSTANCE_ID, env=APP_ENV, logo_url=LOGO_URL)
-
 
 # =====================================================
 # FORMULARIO
@@ -91,19 +104,12 @@ def form():
     <html>
       <body style="font-family: sans-serif; max-width: 420px; margin: 40px auto;">
 
-        {% if logo_url %}
-        <div style="text-align:center;">
-          <img src="{{ logo_url }}" alt="Logo" style="max-width:150px; margin-bottom:20px;">
-        </div>
-        {% endif %}
-
         <h2>Registro (Instancia {{ instance }})</h2>
 
         <form method="POST" action="/submit">
           Nombre:<br><input name="name"><br><br>
           Apellido:<br><input name="surname"><br><br>
           Edad:<br><input name="age"><br><br>
-
           <button type="submit">Enviar</button>
         </form>
 
@@ -111,14 +117,14 @@ def form():
 
       </body>
     </html>
-    """, instance=INSTANCE_ID, logo_url=LOGO_URL)
-
+    """, instance=INSTANCE_ID)
 
 # =====================================================
 # INSERTAR EN DB
 # =====================================================
 @app.route("/submit", methods=["POST"])
 def submit():
+    ensure_table_exists()
 
     name = request.form["name"]
     surname = request.form["surname"]
@@ -126,15 +132,6 @@ def submit():
 
     conn = get_connection()
     cur = conn.cursor()
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            name TEXT,
-            surname TEXT,
-            age INTEGER
-        );
-    """)
 
     cur.execute(
         "INSERT INTO users (name, surname, age) VALUES (%s, %s, %s)",
@@ -145,20 +142,18 @@ def submit():
     cur.close()
     conn.close()
 
-    # invalidar cache SOLO si Redis está activo
     if USE_REDIS:
         redis_client.delete("cached_users")
 
     return redirect("/list")
-
 
 # =====================================================
 # LISTA DE USUARIOS
 # =====================================================
 @app.route("/list")
 def list_users():
+    ensure_table_exists()
 
-    # ---------- DEV: siempre DB, sin caché ----------
     if not USE_REDIS:
         conn = get_connection()
         cur = conn.cursor()
@@ -166,92 +161,81 @@ def list_users():
         rows = cur.fetchall()
         cur.close()
         conn.close()
-
-        return render_template_string(TEMPLATE_LIST,
-            rows=rows,
-            instance=INSTANCE_ID,
-            logo_url=LOGO_URL,
-            data_source="DB (sin caché en dev)"
-        )
-
-    # ---------- PROD: con Redis ----------
-    cached = redis_client.get("cached_users")
-
-    if cached:
-        rows = json.loads(cached)
-        data_source = "CACHE"
+        data_source = "DB (dev)"
 
     else:
+        cached = redis_client.get("cached_users")
+        if cached:
+            rows = json.loads(cached)
+            data_source = "CACHE"
+        else:
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT id, name, surname, age FROM users ORDER BY id DESC LIMIT 10")
+            rows_raw = cur.fetchall()
+            cur.close()
+            conn.close()
+
+            rows = [[r[0], r[1], r[2], r[3]] for r in rows_raw]
+            redis_client.set("cached_users", json.dumps(rows), ex=30)
+            data_source = "DB"
+
+    return render_template_string("""
+    <html>
+    <body style="font-family: sans-serif; max-width: 700px; margin: 40px auto;">
+
+      <h2>Últimos registros</h2>
+
+      <p>
+        <b>Fuente de datos:</b>
+        {% if data_source.startswith("DB") %}
+          <span style="color:red">{{ data_source }}</span>
+        {% else %}
+          <span style="color:green">{{ data_source }}</span>
+        {% endif %}
+      </p>
+
+      <table border="1" cellpadding="6">
+        <tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>Edad</th></tr>
+        {% for r in rows %}
+          <tr>
+            <td>{{ r[0] }}</td>
+            <td>{{ r[1] }}</td>
+            <td>{{ r[2] }}</td>
+            <td>{{ r[3] }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+
+      <br><a href="/">Volver</a>
+    </body>
+    </html>
+    """, rows=rows, data_source=data_source)
+
+# =====================================================
+# HEALTH / PROBES
+# =====================================================
+@app.route("/live")
+def live():
+    return {"status": "alive"}, 200
+
+@app.route("/ready")
+def ready():
+    try:
         conn = get_connection()
-        cur = conn.cursor()
-        cur.execute("SELECT id, name, surname, age FROM users ORDER BY id DESC LIMIT 10")
-        rows_raw = cur.fetchall()
-        cur.close()
         conn.close()
+        if USE_REDIS:
+            redis_client.ping()
+        return {"status": "ready"}, 200
+    except Exception:
+        return {"status": "not ready"}, 503
 
-        # Ya NO hay datetime → no problemas JSON
-        rows = []
-        for r in rows_raw:
-            rows.append([r[0], r[1], r[2], r[3]])
-
-        redis_client.set("cached_users", json.dumps(rows), ex=30)
-        data_source = "DB"
-
-    return render_template_string(TEMPLATE_LIST,
-        rows=rows,
-        instance=INSTANCE_ID,
-        logo_url=LOGO_URL,
-        data_source=data_source
-    )
-
-
-# =====================================================
-# TEMPLATE HTML (Fecha eliminada)
-# =====================================================
-TEMPLATE_LIST = """
-<html>
-<body style="font-family: sans-serif; max-width: 700px; margin: 40px auto;">
-
-    {% if logo_url %}
-    <div style="text-align:center;">
-      <img src="{{ logo_url }}" alt="Logo" style="max-width:150px; margin-bottom:20px;">
-    </div>
-    {% endif %}
-
-    <h2>Últimos registros (Instancia {{ instance }})</h2>
-
-    <p style="font-size:20px;">
-      <b>Fuente de datos:</b>
-      {% if data_source.startswith("DB") %}
-        <span style="color: red;"><b>{{ data_source }}</b></span>
-      {% else %}
-        <span style="color: green;"><b>{{ data_source }}</b></span>
-      {% endif %}
-    </p>
-
-    <table border="1" cellpadding="6">
-      <tr><th>ID</th><th>Nombre</th><th>Apellido</th><th>Edad</th></tr>
-      {% for r in rows %}
-        <tr>
-          <td>{{ r[0] }}</td>
-          <td>{{ r[1] }}</td>
-          <td>{{ r[2] }}</td>
-          <td>{{ r[3] }}</td>
-        </tr>
-      {% endfor %}
-    </table>
-
-    <br><a href="/">Volver</a>
-
-</body>
-</html>
-"""
-# =====================================================
-# HEALTH CHECK
-# =====================================================
-@app.route("/status")
-def status():
-    return {"status": "ok"}, 200
+@app.route("/health")
+def health():
+    return {
+        "app": "ok",
+        "redis": USE_REDIS
+    }, 200
 
 # =====================================================
 # RUN SERVER

@@ -1,45 +1,84 @@
-CLUSTER_NAME=prac3
-LB_PORT=8081
+# ====================
+# VARIABLES
+# ====================
 
-.PHONY: clean cluster build dev prod monitoring grafana
+DEV_CLUSTER=dev
+PRO_CLUSTER=pro
 
-# --------------------
-# CLEAN: borra TODO el clúster
-# --------------------
+DEV_LB_PORT=8081
+PRO_LB_PORT=8082
+
+IMAGE_NAME=flask-app
+IMAGE_TAG=prac3
+
+# ====================
+# PHONY
+# ====================
+
+.PHONY: clean \
+        dev-cluster pro-cluster \
+        build \
+        dev prod \
+        monitoring grafana \
+        test
+
+# ====================
+# CLEAN: borra TODOS los clusters
+# ====================
+
 clean:
-	k3d cluster delete $(CLUSTER_NAME) || true
+	k3d cluster delete $(DEV_CLUSTER) || true
+	k3d cluster delete $(PRO_CLUSTER) || true
 
-# --------------------
-# CLUSTER: crea el clúster una sola vez
-# --------------------
-cluster:
-	k3d cluster create $(CLUSTER_NAME) -p "$(LB_PORT):80@loadbalancer" || true
+# ====================
+# CLUSTERS
+# ====================
 
-# --------------------
-# BUILD: construye la imagen Docker
-# --------------------
+dev-cluster:
+	k3d cluster create $(DEV_CLUSTER) \
+		--servers 1 \
+		--agents 2 \
+		-p "$(DEV_LB_PORT):80@loadbalancer" \
+		--wait || true
+
+pro-cluster:
+	k3d cluster create $(PRO_CLUSTER) \
+		--servers 1 \
+		--agents 3 \
+		-p "$(PRO_LB_PORT):80@loadbalancer" \
+		--wait || true
+
+# ====================
+# BUILD: imagen Docker
+# ====================
+
 build:
-	docker build -t flask-app:prac3 app
+	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) app
 
-# --------------------
-# DEV: despliega SOLO el entorno dev
-# --------------------
+# ====================
+# DEV: despliegue completo DEV
+# ====================
+
 dev: build
+	kubectl config use-context k3d-$(DEV_CLUSTER)
 	kubectl create namespace dev || true
-	k3d image import flask-app:prac3 -c $(CLUSTER_NAME)
+	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c $(DEV_CLUSTER)
 	kubectl apply -f k8s/dev
 
-# --------------------
-# PROD: despliega SOLO el entorno pro
-# --------------------
+# ====================
+# PROD: despliegue completo PRO
+# ====================
+
 prod: build
+	kubectl config use-context k3d-$(PRO_CLUSTER)
 	kubectl create namespace pro || true
-	k3d image import flask-app:prac3 -c $(CLUSTER_NAME)
+	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c $(PRO_CLUSTER)
 	kubectl apply -f k8s/pro
 
-# --------------------
+# ====================
 # MONITORING
-# --------------------
+# ====================
+
 monitoring:
 	kubectl create namespace monitoring || true
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
@@ -47,8 +86,16 @@ monitoring:
 	helm install monitoring prometheus-community/kube-prometheus-stack \
 		--namespace monitoring || true
 
-# --------------------
+# ====================
 # GRAFANA
-# --------------------
+# ====================
+
 grafana:
 	kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+
+# ====================
+# TESTS LOCALES
+# ====================
+
+test:
+	./scripts/run_tests_local.sh
