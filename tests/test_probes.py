@@ -4,27 +4,39 @@ DEV_BASE_URL = "http://flask-dev.local:8081"
 PRO_BASE_URL = "http://flask-pro.local:8082"
 
 
-def test_dev_live():
+# =========================
+# LIVENESS
+# =========================
+
+def test_dev_liveness():
     r = requests.get(f"{DEV_BASE_URL}/live")
     assert r.status_code == 200
     assert r.json()["status"] == "up"
 
 
-def test_pro_live():
+def test_pro_liveness():
     r = requests.get(f"{PRO_BASE_URL}/live")
     assert r.status_code == 200
     assert r.json()["status"] == "up"
 
 
-def test_dev_ready():
+# =========================
+# READINESS
+# =========================
+
+def test_dev_readiness():
     r = requests.get(f"{DEV_BASE_URL}/ready")
     assert r.status_code == 200
 
 
-def test_pro_ready():
+def test_pro_readiness():
     r = requests.get(f"{PRO_BASE_URL}/ready")
     assert r.status_code == 200
 
+
+# =========================
+# HEALTHCHECK
+# =========================
 
 def test_dev_health():
     r = requests.get(f"{DEV_BASE_URL}/health")

@@ -98,7 +98,7 @@ grafana:
 # ====================
 
 test:
-	./scripts/run_tests_local.sh
+	pytest -v tests/test_probes.py
 
 # --------------------
 # PRO - Persistencia Postgres
