@@ -1,0 +1,81 @@
+name: CI/CD Kubernetes Practice
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  IMAGE_NAME: flask-app
+  IMAGE_TAG: prac3
+  DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USER }}
+
+jobs:
+  lint-and-test:
+    name: Lint & Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install flask psycopg2-binary redis requests pytest flake8
+
+      - name: Lint code (flake8)
+        run: |
+          flake8 app --max-line-length=120 || true
+
+      - name: Run tests
+        run: |
+          pytest tests
+  build-and-push:
+    name: Build & Push Docker Image
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build Docker image
+        run: |
+          docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG app
+
+      - name: Push Docker image
+        run: |
+          docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG
+  deploy-simulated:
+    name: Deploy (Simulated)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show deploy instructions
+        run: |
+          echo "===================================="
+          echo "🚀 DEPLOY SIMULADO"
+          echo "===================================="
+          echo ""
+          echo "make dev"
+          echo "make prod"
+          echo ""
+          echo "o manualmente:"
+          echo "kubectl apply -f k8s/dev"
+          echo "kubectl apply -f k8s/pro"
+          echo ""
+          echo "===================================="
