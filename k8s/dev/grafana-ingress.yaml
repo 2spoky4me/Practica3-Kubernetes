@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-dev
+  namespace: monitoring
+spec:
+  rules:
+    - host: grafana-dev.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-dev-grafana
+                port:
+                  number: 80
