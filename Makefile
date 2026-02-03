@@ -83,8 +83,10 @@ monitoring:
 	kubectl create namespace monitoring || true
 	helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
 	helm repo update
-	helm install monitoring prometheus-community/kube-prometheus-stack \
-		--namespace monitoring || true
+	helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+		--namespace monitoring \
+		-f k8s/monitoring/values.yaml
+
 
 # ====================
 # GRAFANA
