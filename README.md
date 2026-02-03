@@ -1,219 +1,268 @@
-# Práctica 3 – Despliegue de Aplicaciones con Kubernetes
-
-## Descripción
-Esta práctica consiste en el despliegue de una aplicación web desarrollada en Flask sobre Kubernetes, utilizando un clúster local con k3d.  
-La solución implementa separación de entornos (desarrollo y producción), alta disponibilidad, monitorización, health-checks y automatización del despliegue.
-# Práctica 3 – Despliegue de Aplicaciones con Kubernetes
-
-## Descripción
-Esta práctica consiste en el despliegue de una aplicación web desarrollada en Flask sobre Kubernetes, utilizando un clúster local con **k3d**.  
-La solución implementa separación de entornos (desarrollo y producción), alta disponibilidad, monitorización, health-checks y automatización del despliegue.
-
-El objetivo es simular un entorno real de despliegue cloud empleando herramientas habituales en entornos **DevOps**.
+# Práctica 3 – Kubernetes  
+Asignatura: Redes Avanzadas  
+Autor: Oriol Arderiu  
 
 ---
 
-## Arquitectura
+## 1. Introducción
 
-- **Clúster Kubernetes**: k3d (nombre del clúster: `prac3`)
-- **Namespaces**:
-  - `dev` → entorno de desarrollo
-  - `pro` → entorno de producción
-  - `monitoring` → monitorización
-- **Aplicación web**: Flask
-- **Base de datos**: PostgreSQL
-- **Caché**: Redis (solo en producción)
-- **Ingress Controller**: Traefik
-- **Monitorización**: Prometheus + Grafana
-- **Automatización**: Makefile
-- **CI/CD**: GitHub Actions
+Este proyecto corresponde a la **Práctica 3 de la asignatura Redes Avanzadas**.  
+El objetivo es diseñar, desplegar y validar una **aplicación web en Kubernetes**, aplicando conceptos reales de arquitectura cloud, alta disponibilidad, persistencia, monitorización y automatización.
+
+La aplicación está desarrollada en **Flask** y se ejecuta sobre **Kubernetes local (k3d)**.  
+Se han definido **dos entornos diferenciados**:
+
+- **DEV**: entorno de desarrollo simplificado
+- **PRO**: entorno de producción con servicios adicionales
 
 ---
 
-## Requisitos previos
+## 2. Requisitos previos
 
-Antes de comenzar, es necesario tener instaladas las siguientes herramientas:
+Es necesario tener instalados:
 
 - Docker
-- kubectl
 - k3d
+- kubectl
 - helm
 - make
-- git
-
-El proyecto ha sido desarrollado y probado en **Linux / WSL** con **Docker Desktop**.
+- curl
+- jq
+- mc (MinIO Client)
 
 ---
 
-## Clonar el repositorio
+## 3. Configuración obligatoria de /etc/hosts
 
-```bash
-git clone https://github.com/2spoky4me/Practica3-Kubernetes.git
-cd Practica3-Kubernetes
-Configuración DNS local
-Para poder acceder a la aplicación mediante Ingress, es necesario modificar el archivo hosts del sistema.
+Antes de desplegar el proyecto, es **imprescindible** añadir las siguientes entradas en `/etc/hosts`:
 
-En Windows, editar el archivo:
-
-makefile
-Copiar código
-C:\Windows\System32\drivers\etc\hosts
-Añadir las siguientes líneas:
-
-lua
-Copiar código
+```txt
 127.0.0.1 flask-dev.local
 127.0.0.1 flask-pro.local
-Despliegue completo desde cero
-1. Limpiar cualquier estado previo
-Este paso elimina completamente el clúster Kubernetes si existiera previamente.
+127.0.0.1 grafana-dev.local
+127.0.0.1 grafana-pro.local
+127.0.0.1 minio-pro.local
+127.0.0.1 minio-api-pro.local
+¿Por qué es necesario?
+El proyecto utiliza Ingress con hostnames personalizados (virtual hosts).
+Traefik enruta el tráfico en función del Host HTTP, no por IP ni por puerto.
 
-bash
-Copiar código
-make clean
-2. Crear el clúster Kubernetes
-bash
-Copiar código
-make cluster
-Este comando crea un clúster k3d llamado prac3 y expone el LoadBalancer en el puerto 8081.
+Sin estas entradas:
 
-Despliegue de entornos
-Entorno de producción
-bash
-Copiar código
-make prod
-Este comando realiza:
+El navegador no resolvería los dominios
 
-Construcción de la imagen Docker de la aplicación
+Los Ingress no funcionarían correctamente
 
-Importación de la imagen al clúster
+No se podría simular un entorno real de producción
 
-Creación del namespace pro
+Esta configuración permite:
 
-Despliegue de la aplicación Flask, PostgreSQL y Redis
+Separar DEV y PRO por dominio
 
-Configuración del Ingress de producción
+Simular un entorno real sin DNS externo
 
-Acceso a la aplicación:
+Cumplir buenas prácticas de Kubernetes
 
-arduino
-Copiar código
-http://flask-pro.local:8081
-Entorno de desarrollo
-bash
-Copiar código
-make dev
-Este comando realiza:
+4. Estructura del proyecto
+.
+├── app/
+│   ├── Dockerfile
+│   ├── app.py
+│   └── requirements.txt
+│
+├── k8s/
+│   ├── dev/            # Manifiestos Kubernetes DEV
+│   ├── pro/            # Manifiestos Kubernetes PRO
+│   └── monitoring/     # Prometheus / Grafana
+│
+├── scripts/
+│   ├── test-e2e.sh     # Tests End-to-End
+│   └── cost-estimate.sh
+│
+├── tests/
+│   └── test_probes.py  # Tests de probes
+│
+├── Makefile
+├── README.md
+└── logouib.png
+5. Descripción de la aplicación
+La aplicación web permite:
 
-Despliegue del entorno de desarrollo en el namespace dev
+Insertar usuarios en una base de datos PostgreSQL
 
-Despliegue de la aplicación Flask y PostgreSQL
+Listar usuarios
 
-Redis no se utiliza en este entorno
+Mostrar información de estado del sistema
 
-Menor número de réplicas que en producción
+Endpoints expuestos
+/live → Liveness Probe
 
-Acceso a la aplicación:
+/ready → Readiness Probe
 
-arduino
-Copiar código
-http://flask-dev.local:8081
-Los entornos dev y pro pueden estar levantados simultáneamente dentro del mismo clúster gracias al uso de namespaces.
+/health → Estado general del sistema
 
-Health-checks
-La aplicación expone el endpoint:
+/ → Interfaz web
 
-bash
-Copiar código
-/status
-Este endpoint:
+/form → Inserción de datos
 
-Devuelve el estado de la aplicación
+/list → Listado de usuarios
 
-Es utilizado por Kubernetes como livenessProbe y readinessProbe
+En producción, la aplicación además:
 
-Ejemplo de acceso:
+Cachea resultados con Redis
 
-bash
-Copiar código
-http://flask-pro.local:8081/status
-Alta disponibilidad
-DEV: 2 réplicas de la aplicación
+Sirve assets estáticos desde MinIO
 
-PRO: 4 réplicas de la aplicación
+Incluye monitorización con Prometheus y Grafana
 
-El balanceo de carga se realiza automáticamente mediante Kubernetes Service e Ingress.
-Cada petición puede ser atendida por una réplica distinta, lo que se puede comprobar refrescando la página y observando el identificador de instancia.
+6. Arquitectura del sistema
+Entorno DEV
+Flask (2 réplicas)
 
-Redis
-Redis solo está desplegado en el entorno de producción
+PostgreSQL (persistente)
 
-En producción, la aplicación utiliza Redis como sistema de caché
+Ingress (Traefik)
 
-En desarrollo, Redis no se utiliza
+Entorno PRO
+Flask (4 réplicas)
 
-Esto permite diferenciar claramente el comportamiento entre ambos entornos.
+PostgreSQL (persistente)
 
-Monitorización
-Despliegue del stack de monitorización
-bash
-Copiar código
+Redis (cache)
+
+MinIO (almacenamiento de ficheros)
+
+Prometheus + Grafana (monitorización)
+
+Ingress (Traefik)
+
+Diagrama lógico (simplificado)
+Usuario
+  |
+Ingress (Traefik)
+  |
+Flask (réplicas)
+  |
+PostgreSQL (PVC)
+  |
+Redis (solo PRO)
+  |
+MinIO (assets)
+7. Despliegue del proyecto
+Entorno DEV
+make dev-cluster
 make monitoring
-Este comando despliega Prometheus, Grafana y Alertmanager en el namespace monitoring.
+make dev
+Aplicación disponible en:
+👉 http://flask-dev.local:8081
 
-Acceso a Grafana
-bash
-Copiar código
-make grafana
-Acceso vía navegador:
+Entorno PRO
+make pro-cluster
+make monitoring
+make prod
+Aplicación disponible en:
+👉 http://flask-pro.local:8082
 
-arduino
-Copiar código
-http://localhost:3000
-Usuario por defecto:
+8. Tests utilizados
+8.1 Tests locales (probes)
+Archivo: tests/test_probes.py
 
-nginx
-Copiar código
-admin
-Para obtener la contraseña de Grafana:
+Valida:
 
-bash
-Copiar código
-kubectl get secret -n monitoring monitoring-grafana \
-  -o jsonpath="{.data.admin-password}" | base64 -d
-En Grafana se pueden visualizar métricas como:
+/live
 
-Uso de CPU de los pods
+/ready
 
-Uso de memoria
+/health
 
-Estado de las réplicas
+Redis solo en PRO
 
-Estado general del clúster
+Ejecución:
 
-Automatización
-El proyecto incluye un Makefile que permite:
+make test
+Ejemplo de salida:
 
-Crear y eliminar el clúster Kubernetes
+✔ /live OK
+✔ /ready OK
+✔ /health OK
+8.2 Tests End-to-End
+Script: scripts/test-e2e.sh
 
-Desplegar los entornos dev y pro de forma independiente
+Valida automáticamente:
 
-Levantar el stack de monitorización
+Número de réplicas desplegadas
 
-Acceder fácilmente a Grafana
+Estado Ready de los pods
 
-Esto permite repetir el despliegue de forma reproducible y controlada.
+Balanceo de tráfico entre réplicas
 
-CI/CD
-El repositorio incluye un workflow de GitHub Actions que:
+Funcionamiento de MinIO (solo PRO)
 
-Se ejecuta automáticamente en cada push
+Funcionamiento de Redis y TTL (solo PRO)
 
-Ejecuta tests básicos de la aplicación
+Correcto estado del endpoint /health
 
-Verifica el correcto funcionamiento del endpoint /status
+Ejecución:
 
-Simula un pipeline de integración continua
+make test-e2e-dev
+make test-e2e-pro
+Ejemplo de salida:
 
-Autor
-Oriol Arderi
+OK: 4 replicas Ready
+Traffic distribution:
+  flask-app-xxx -> 4 requests
+  flask-app-yyy -> 6 requests
+OK: MinIO file exists and is valid
+OK: Redis cache working
+OK: /health endpoint valid
+9. Uso del Makefile
+El Makefile centraliza toda la automatización del proyecto.
+
+Comandos principales
+make dev-cluster
+make pro-cluster
+make build
+make dev
+make prod
+make monitoring
+make test
+make test-e2e-dev
+make test-e2e-pro
+make clean
+Permite:
+
+Crear y borrar clusters
+
+Construir imágenes Docker
+
+Desplegar entornos
+
+Ejecutar tests
+
+Simular fallos y recuperación
+
+10. CI/CD
+Se incluye un workflow de GitHub Actions que realiza:
+
+Lint del código
+
+Tests simulados
+
+Build & push de la imagen Docker
+
+Deploy simulado (instrucciones por consola)
+
+El despliegue real se ejecuta en local, tal como se solicita en la práctica.
+
+11. Conclusión
+Con esta práctica se ha implementado una arquitectura Kubernetes realista, separando entornos, integrando servicios habituales (DB, cache, storage, monitoring) y validando el sistema mediante tests automáticos y end-to-end.
+
+El proyecto demuestra:
+
+Uso correcto de Kubernetes
+
+Buenas prácticas de observabilidad
+
+Automatización mediante Makefile
+
+Validación funcional del sistema completo
