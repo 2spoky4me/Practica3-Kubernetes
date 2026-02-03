@@ -64,6 +64,9 @@ dev: build
 	kubectl create namespace dev || true
 	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c $(DEV_CLUSTER)
 	kubectl apply -f k8s/dev
+	@echo ""
+	@echo ">>> AWS cost estimation for DEV <<<"
+	@ENV=dev bash scripts/cost-estimate.sh
 
 # ====================
 # PROD: despliegue completo PRO
@@ -74,6 +77,9 @@ prod: build
 	kubectl create namespace pro || true
 	k3d image import $(IMAGE_NAME):$(IMAGE_TAG) -c $(PRO_CLUSTER)
 	kubectl apply -f k8s/pro
+	@echo ""
+	@echo ">>> AWS cost estimation for PROD <<<"
+	@ENV=pro bash scripts/cost-estimate.sh
 
 # ====================
 # MONITORING
