@@ -79,7 +79,7 @@ jobs:
       - name: Show deploy instructions
         run: |
           echo "========================================"
-          echo "🚀 DEPLOY SIMULADO (EJECUTAR EN LOCAL)"
+          echo "DEPLOY SIMULADO (EJECUTAR EN LOCAL)"
           echo "========================================"
           echo ""
           echo "# --- DEV ---"
@@ -93,5 +93,5 @@ jobs:
           echo "make prod"
           echo ""
           echo "========================================"
-          echo "ℹ️  El despliegue real se realiza en local"
+          echo "ℹEl despliegue real se realiza en local"
           echo "========================================"
