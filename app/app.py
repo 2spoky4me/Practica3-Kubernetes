@@ -21,6 +21,8 @@ INSTANCE_ID = os.getenv("APP_INSTANCE_ID", "0")
 REDIS_HOST = os.getenv("REDIS_HOST", "")
 REDIS_PORT = os.getenv("REDIS_PORT", "")
 
+LOGO_URL = os.getenv("LOGO_URL", "")
+
 USE_REDIS = (
     APP_ENV == "prod"
     and REDIS_HOST != ""
@@ -109,11 +111,21 @@ def health():
 @app.route("/")
 def index():
     return render_template_string("""
-    <h2>Flask App</h2>
+    <div style="display:flex; align-items:center;">
+      {% if logo_url %}
+        <img src="{{ logo_url }}" width="60" style="margin-right:15px;">
+      {% endif %}
+      <h2>Flask App</h2>
+    </div>
+
     <p>Env: {{ env }}</p>
     <p>Instance: {{ instance }}</p>
-    <a href="/form">Formulario</a>
-    """, env=APP_ENV, instance=INSTANCE_ID)
+
+    <ul>
+      <li><a href="/form">Formulario</a></li>
+      <li><a href="/list">Listado usuarios</a></li>
+    </ul>
+    """, env=APP_ENV, instance=INSTANCE_ID, logo_url=LOGO_URL)
 
 @app.route("/form")
 def form():
@@ -210,5 +222,8 @@ TEMPLATE_LIST = """
 <a href="/">Volver</a>
 """
 
+# =====================================================
+# RUN
+# =====================================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8000)

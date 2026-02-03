@@ -120,3 +120,14 @@ pro-db-wait:
 pro-db-status:
 	kubectl get pods -n pro -l app=postgres
 
+test-e2e-dev:
+	bash scripts/test-e2e.sh dev
+
+test-e2e-pro:
+	bash scripts/test-e2e.sh prod
+
+cost-estimate:
+	ENV=$(ENV) bash scripts/cost-estimate.sh
+
+
+

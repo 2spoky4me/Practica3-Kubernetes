@@ -34,6 +34,12 @@ spec:
                   fieldPath: metadata.name
 
             # --------------------
+            # Logo desde MinIO (URL firmada)
+            # --------------------
+            - name: LOGO_URL
+              value: "http://minio-pro.local:8082/api/v1/download-shared-object/http://minio-pro.local:8082/api/v1/download-shared-object/aHR0cDovLzEyNy4wLjAuMTo5MDAwL2xvZ291aWIvbG9nb3VpYi5wbmc_WC1BbXotQWxnb3JpdGhtPUFXUzQtSE1BQy1TSEEyNTYmWC1BbXotQ3JlZGVudGlhbD1BR1JaMDNKQVpXMVBYM1lSRkRBTyUyRjIwMjYwMjAyJTJGdXMtZWFzdC0xJTJGczMlMkZhd3M0X3JlcXVlc3QmWC1BbXotRGF0ZT0yMDI2MDIwMlQyMTI2NTFaJlgtQW16LUV4cGlyZXM9NDMyMDAmWC1BbXotU2VjdXJpdHktVG9rZW49ZXlKaGJHY2lPaUpJVXpVeE1pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SmhZMk5sYzNOTFpYa2lPaUpCUjFKYU1ETktRVnBYTVZCWU0xbFNSa1JCVHlJc0ltVjRjQ0k2TVRjM01ERXdOamt6TWl3aWNHRnlaVzUwSWpvaVlXUnRhVzRpZlEuX005cmJOOHczSlk0N2JSS2tVRTJObVBuNmh3SjBKN3VBclBpVnh3YkliRV9yd3Zabkg4RHp6WmtCQnYyTkxZUWY4TmJ4ZnJucEZvdGk5NkJ3Q29ZTHcmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0JnZlcnNpb25JZD1udWxsJlgtQW16LVNpZ25hdHVyZT1lOTY4YjBlMGJjY2YyN2VlODY2MDkzMmRlOThmYjM0ZmJjNzUxZjAzMjg2Y2E3MDY4OWRiZTU1NTVhZGI1YmY0"
+
+            # --------------------
             # Postgres
             # --------------------
             - name: DB_HOST
