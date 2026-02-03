@@ -77,7 +77,20 @@ jobs:
     steps:
       - name: Show deploy instructions
         run: |
-          echo "🚀 DEPLOY SIMULADO"
-          echo "docker pull $REGISTRY/$IMAGE_NAME:$IMAGE_TAG"
+          echo "========================================"
+          echo "🚀 DEPLOY SIMULADO (EJECUTAR EN LOCAL)"
+          echo "========================================"
+          echo ""
+          echo "# --- DEV ---"
+          echo "make dev-cluster"
+          echo "make monitoring"
           echo "make dev"
+          echo ""
+          echo "# --- PRO ---"
+          echo "make pro-cluster"
+          echo "make monitoring"
           echo "make prod"
+          echo ""
+          echo "========================================"
+          echo "ℹ️  El despliegue real se realiza en local"
+          echo "========================================"
