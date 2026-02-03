@@ -23,16 +23,17 @@ fi
 echo "=== E2E tests for environment: $ENV ==="
 
 # -------------------------------------------------
-# 1. Validación de réplicas
+# 1. Réplicas
 # -------------------------------------------------
 echo "-> Checking replicas"
 
-READY_REPLICAS=$(kubectl get deploy flask-app -n $NAMESPACE \
+READY_REPLICAS=$(kubectl get deploy flask-app \
+  -n $NAMESPACE \
   --context $CONTEXT \
   -o jsonpath='{.status.readyReplicas}')
 
-if [ "$READY_REPLICAS" -lt "$EXPECTED_REPLICAS" ]; then
-  echo "ERROR: Expected $EXPECTED_REPLICAS replicas, got $READY_REPLICAS"
+if [ -z "$READY_REPLICAS" ] || [ "$READY_REPLICAS" -lt "$EXPECTED_REPLICAS" ]; then
+  echo "ERROR: Expected $EXPECTED_REPLICAS ready replicas, got $READY_REPLICAS"
   exit 1
 fi
 
@@ -46,7 +47,7 @@ echo "-> Checking traffic distribution"
 declare -A PODS
 
 for i in {1..10}; do
-  POD=$(curl -s $BASE_URL | grep Instance | sed 's/<[^>]*>//g' | awk '{print $2}')
+  POD=$(curl -s $BASE_URL | grep Instance | awk '{print $2}')
   PODS[$POD]=$((PODS[$POD]+1))
 done
 
@@ -56,18 +57,17 @@ for p in "${!PODS[@]}"; do
 done
 
 if [ "${#PODS[@]}" -lt 2 ]; then
-  echo "ERROR: Traffic is not distributed"
+  echo "ERROR: Traffic is not distributed between replicas"
   exit 1
 fi
 
 # -------------------------------------------------
-# 3. MinIO verification (only prod)
+# 3. MinIO (solo prod)
 # -------------------------------------------------
 if [ "$USE_MINIO" = true ]; then
   echo "-> Checking MinIO"
 
   MC_ALIAS="minio"
-
   mc alias rm $MC_ALIAS >/dev/null 2>&1 || true
   mc alias set $MC_ALIAS $MINIO_URL admin admin123
 
@@ -80,33 +80,32 @@ if [ "$USE_MINIO" = true ]; then
   mc cp $MC_ALIAS/logouib/logouib.png /tmp/logouib.png
 
   if [ ! -s /tmp/logouib.png ]; then
-    echo "ERROR: Downloaded file is empty or corrupted"
+    echo "ERROR: Downloaded MinIO file is empty or corrupted"
     exit 1
   fi
 
   echo "OK: MinIO file exists and is valid"
 else
-  echo "-> Skipping MinIO check (dev environment)"
+  echo "-> Skipping MinIO check (dev)"
 fi
 
 # -------------------------------------------------
-# 4. Redis (solo prod)
+# 4. Redis cache (solo prod)
 # -------------------------------------------------
 if [ "$USE_REDIS" = true ]; then
   echo "-> Checking Redis cache"
 
-  # Provocar uso de caché
+  # Forzar uso de caché
   curl -s $BASE_URL/list > /dev/null
 
-  # Obtener pod de Redis por label (estable)
-  REDIS_POD=$(kubectl get pods -n $NAMESPACE -l app=redis -o jsonpath='{.items[0].metadata.name}')
+  REDIS_POD=$(kubectl get pods -n $NAMESPACE -l app=redis \
+    -o jsonpath='{.items[0].metadata.name}')
 
   if [ -z "$REDIS_POD" ]; then
     echo "ERROR: Redis pod not found"
     exit 1
   fi
 
-  # Comprobar que existen claves en Redis
   KEYS=$(kubectl exec -n $NAMESPACE $REDIS_POD -- redis-cli KEYS '*' | wc -l)
 
   if [ "$KEYS" -lt 1 ]; then
@@ -114,7 +113,6 @@ if [ "$USE_REDIS" = true ]; then
     exit 1
   fi
 
-  # Mostrar TTL de la primera clave
   KEY=$(kubectl exec -n $NAMESPACE $REDIS_POD -- redis-cli KEYS '*' | head -n 1)
   TTL=$(kubectl exec -n $NAMESPACE $REDIS_POD -- redis-cli TTL "$KEY")
 
@@ -130,15 +128,27 @@ if [ "$USE_REDIS" = true ]; then
 fi
 
 # -------------------------------------------------
-# 5. Health endpoint
+# 5. Health + latencias 
 # -------------------------------------------------
-echo "-> Checking /health"
+echo "-> Checking /health endpoint"
 
 HEALTH=$(curl -s $BASE_URL/health)
 
 APP_STATUS=$(echo "$HEALTH" | jq -r '.app')
-DB_STATUS=$(echo "$HEALTH" | jq -r '.database')
-REDIS_STATUS=$(echo "$HEALTH" | jq -r '.redis')
+DB_STATUS=$(echo "$HEALTH" | jq -r '.database.status')
+
+REDIS_TYPE=$(echo "$HEALTH" | jq -r '.redis | type')
+
+if [ "$REDIS_TYPE" = "object" ]; then
+  REDIS_STATUS=$(echo "$HEALTH" | jq -r '.redis.status')
+  REDIS_LATENCY=$(echo "$HEALTH" | jq -r '.redis.latency_ms')
+else
+  REDIS_STATUS=$(echo "$HEALTH" | jq -r '.redis')
+  REDIS_LATENCY="n/a"
+fi
+
+APP_LATENCY=$(echo "$HEALTH" | jq -r '.latency_ms')
+DB_LATENCY=$(echo "$HEALTH" | jq -r '.database.latency_ms')
 
 if [ "$APP_STATUS" != "up" ]; then
   echo "ERROR: app not up"
@@ -155,4 +165,13 @@ if [ "$USE_REDIS" = true ] && [ "$REDIS_STATUS" != "ok" ]; then
   exit 1
 fi
 
+echo "Latencies:"
+echo "  App: ${APP_LATENCY} ms"
+echo "  Database: ${DB_LATENCY} ms"
+
+if [ "$USE_REDIS" = true ]; then
+  echo "  Redis: ${REDIS_LATENCY} ms"
+fi
+
 echo "OK: /health endpoint valid"
+echo "=== E2E tests completed successfully ==="

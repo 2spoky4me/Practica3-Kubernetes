@@ -3,6 +3,8 @@ import os
 import psycopg2
 import redis
 import json
+import time
+
 
 app = Flask(__name__)
 
@@ -82,28 +84,47 @@ def ready():
 
     return {"status": "ready"}, 200
 
+import time
+
 @app.route("/health")
 def health():
+    start_app = time.time()
+
     result = {
         "app": "up",
-        "database": "ok",
-        "redis": "disabled"
+        "database": {
+            "status": "ok",
+            "latency_ms": None
+        },
+        "redis": {
+            "status": "disabled",
+            "latency_ms": None
+        }
     }
 
+    # Database check
     try:
+        start_db = time.time()
         conn = get_connection()
         conn.close()
+        result["database"]["latency_ms"] = round((time.time() - start_db) * 1000, 2)
     except Exception:
-        result["database"] = "down"
+        result["database"]["status"] = "down"
 
+    # Redis check
     if USE_REDIS:
+        result["redis"]["status"] = "ok"
         try:
+            start_redis = time.time()
             redis_client.ping()
-            result["redis"] = "ok"
+            result["redis"]["latency_ms"] = round((time.time() - start_redis) * 1000, 2)
         except Exception:
-            result["redis"] = "down"
+            result["redis"]["status"] = "down"
+
+    result["latency_ms"] = round((time.time() - start_app) * 1000, 2)
 
     return result, 200
+
 
 # =====================================================
 # UI
